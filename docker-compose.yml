@@ -1,0 +1,7 @@
+services:
+  url-to-markdown:
+    build: .
+    volumes:
+      - ./volumes.d/output:/app/output
+    environment:
+      - PYTHONUNBUFFERED=1
