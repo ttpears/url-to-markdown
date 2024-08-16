@@ -7,7 +7,7 @@
 
 ```
 url-to-markdown/
-├── docker-compose.yml
+├── docker compose.yml
 ├── Dockerfile
 ├── requirements.txt
 └── url_to_markdown.py
@@ -20,7 +20,7 @@ url-to-markdown/
 - **url_to_markdown.py**: The main Python script that fetches the webpage content and converts it to Markdown.
 - **Dockerfile**: The Dockerfile for building a Docker image that runs the Python script.
 - **requirements.txt**: Python dependencies needed for the script.
-- **docker-compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
+- **docker compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
 - **.gitignore**: Specifies which files and directories to ignore in version control.
 
 ## Prerequisites
@@ -40,7 +40,7 @@ url-to-markdown/
 2. **Build and Run with Docker Compose**
 
    ```sh
-   docker-compose up --build
+   docker compose up --build
    ```
 
    This command will build the Docker image and start the container. The output directory inside the container is mapped to `./volumes.d/output` on your host machine.
@@ -50,13 +50,13 @@ url-to-markdown/
    You can then specify the URL to convert by passing it as an argument:
 
    ```sh
-   docker-compose run url-to-markdown <URL>
+   docker compose run --rm url-to-markdown <URL>
    ```
 
    For example:
 
    ```sh
-   docker-compose run url-to-markdown https://example.com
+   docker compose run --rm url-to-markdown https://example.com
    ```
 
    The resulting Markdown file will be saved in the `./volumes.d/output` directory.
@@ -66,7 +66,7 @@ url-to-markdown/
 To convert a URL, use the following command:
 
 ```sh
-docker-compose run url-to-markdown https://example.com
+docker compose run --rm url-to-markdown https://example.com
 ```
 
 This converts the content of `https://example.com` into a Markdown file which will be saved in the `./volumes.d/output` directory.
@@ -76,7 +76,7 @@ This converts the content of `https://example.com` into a Markdown file which wi
 To stop the running container:
 
 ```sh
-docker-compose down
+docker compose down
 ```
 
 To remove Docker images and containers:
