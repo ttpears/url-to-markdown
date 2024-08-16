@@ -10,7 +10,7 @@ async def url_to_markdown(url):
             # Run browser in headful mode for more visibility
             browser = await p.chromium.launch(headless=False)
             context = await browser.new_context(
-                viewport={"width": 1280, "height": 800},
+                viewport={"width": 1920, "height": 1080},  # Update resolution
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0"
             )
             page = await context.new_page()
@@ -31,8 +31,13 @@ async def url_to_markdown(url):
             except TimeoutError:
                 return f"Error: Timeout while waiting for page content."
 
+            # Create a directory for the URL based on hostname and path
+            folder_name = url.replace("://", "_").replace("/", "_")
+            folder_path = f'/app/output/{folder_name}'
+            os.makedirs(folder_path, exist_ok=True)
+
             # Take a screenshot for debugging purposes
-            screenshot_path = f'/app/output/screenshot_{url.replace("://", "_").replace("/", "_")}.png'
+            screenshot_path = f'{folder_path}/screenshot.png'
             await page.screenshot(path=screenshot_path)
             print(f"Screenshot saved to {screenshot_path}")
 
@@ -45,11 +50,11 @@ async def url_to_markdown(url):
             h.ignore_links = False
             markdown = h.handle(content)
 
-            return markdown.strip()
+            return markdown.strip(), folder_path
     except TimeoutError as e:
-        return f"Error: {e}"
+        return f"Error: {e}", None
     except Exception as e:
-        return f"General Error: {e}"
+        return f"General Error: {e}", None
 
 async def main():
     if len(sys.argv) < 2:
@@ -57,17 +62,15 @@ async def main():
         sys.exit(1)
 
     url = sys.argv[1]
-    markdown = await url_to_markdown(url)
+    markdown, folder_path = await url_to_markdown(url)
 
-    # Create output directory if it doesn't exist
-    os.makedirs('/app/output', exist_ok=True)
+    if folder_path:
+        # Write markdown to file
+        output_file = f'{folder_path}/content.md'
+        with open(output_file, 'w') as f:
+            f.write(markdown)
 
-    # Write markdown to file
-    output_file = f'/app/output/{url.replace("://", "_").replace("/", "_")}.md'
-    with open(output_file, 'w') as f:
-        f.write(markdown)
-
-    print(f"Markdown saved to {output_file}")
+        print(f"Markdown saved to {output_file}")
 
 if __name__ == "__main__":
     asyncio.run(main())

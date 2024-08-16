@@ -1,18 +1,18 @@
 # URL to Markdown
 
-`url-to-markdown` is a Python-based tool that converts a webpage from a given URL to a Markdown file. The tool uses [Playwright](https://playwright.dev/) to fetch and render the page content and [html2text](https://github.com/Alir3z4/html2text) to convert the HTML to Markdown format.
-
+`url-to-markdown` is a Python-based tool that converts a webpage from a given URL to a Markdown file and takes a screenshot of the webpage. The tool uses [Playwright](https://playwright.dev/) to fetch and renderthe page content, and [html2text](https://github.com/Alir3z4/html2text) to convert the HTML to Markdown format.
 
 ## File Structure
 
 ```
 url-to-markdown/
-├── docker compose.yml
+├── docker-compose.yml
 ├── Dockerfile
 ├── requirements.txt
-└── url_to_markdown.py
+├── start.sh
+├── url_to_markdown.py
 └── volumes.d/
-  └── output 
+    └── output
 ```
 
 ## File Contents
@@ -20,8 +20,8 @@ url-to-markdown/
 - **url_to_markdown.py**: The main Python script that fetches the webpage content and converts it to Markdown.
 - **Dockerfile**: The Dockerfile for building a Docker image that runs the Python script.
 - **requirements.txt**: Python dependencies needed for the script.
-- **docker compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
-- **.gitignore**: Specifies which files and directories to ignore in version control.
+- **docker-compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
+- **start.sh**: Script to start xvfb and run the main script.
 
 ## Prerequisites
 
@@ -59,7 +59,7 @@ url-to-markdown/
    docker compose run --rm url-to-markdown https://example.com
    ```
 
-   The resulting Markdown file will be saved in the `./volumes.d/output` directory.
+   The resulting Markdown file and screenshot will be saved in the `./volumes.d/output/<URL>` directory.
 
 ## Example
 
@@ -69,7 +69,7 @@ To convert a URL, use the following command:
 docker compose run --rm url-to-markdown https://example.com
 ```
 
-This converts the content of `https://example.com` into a Markdown file which will be saved in the `./volumes.d/output` directory.
+This converts the content of `https://example.com` into a Markdown file and takes a screenshot, both of which will be saved in the `./volumes.d/output` directory.
 
 ## Cleaning Up
 
