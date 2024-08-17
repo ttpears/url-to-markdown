@@ -31,7 +31,6 @@ CLEAR_COOKIES = False
 # User-Agent for Google's web crawler
 CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
-
 def create_directory_structure(domain):
     base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}'
     os.makedirs(base_path, exist_ok=True)
@@ -40,14 +39,11 @@ def create_directory_structure(domain):
     os.makedirs(f'{base_path}/reports', exist_ok=True)
     return base_path
 
-
 def is_same_domain(url):
     return urlparse(url).netloc == DOMAIN
 
-
 def normalize_url(base, link):
     return urljoin(base, link.split('#')[0]).rstrip('/')
-
 
 def get_folder_size(folder_path):
     total_size = 0
@@ -58,14 +54,12 @@ def get_folder_size(folder_path):
     # Return size in MB
     return total_size / (1024 * 1024)
 
-
 async def extract_metrics(page, response, start_time, ttfb):
     content = await page.content()
     soup = BeautifulSoup(content, 'html.parser')
     assets_count = len(soup.find_all(['img', 'link', 'script']))
     load_time = time.time() - start_time
     return content, assets_count, load_time, ttfb
-
 
 async def extract_links(page_content, base_url):
     soup = BeautifulSoup(page_content, 'html.parser')
@@ -76,7 +70,6 @@ async def extract_links(page_content, base_url):
         if is_same_domain(full_url) and full_url not in VISITED_URLS:
             links.add(full_url)
     return links
-
 
 async def save_sitemap(file_path, urls):
     sitemap_lines = [
@@ -89,7 +82,6 @@ async def save_sitemap(file_path, urls):
 
     with open(file_path, 'w') as f:
         f.write('\n'.join(sitemap_lines))
-
 
 async def fetch_page(url, page, base_path):
     global VISITED_URLS, TOTAL_TESTED, SITEMAP_URLS, CLEAR_COOKIES
@@ -157,7 +149,6 @@ async def fetch_page(url, page, base_path):
         result["error"] = str(e)
         return [], result
 
-
 async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
     for attempt in range(retries):
         try:
@@ -177,7 +168,6 @@ async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
                     "ttfb": 0
                 }
 
-
 async def crawl(start_url):
     global DOMAIN, CONTEXT_MANAGER, PAGE, RESULTS, RUNNING, TO_VISIT_URLS
     DOMAIN = urlparse(start_url).netloc
@@ -186,6 +176,8 @@ async def crawl(start_url):
     VISITED_URLS.clear()
     RESULTS = []
 
+    VIDEO_FOLDER = f"{base_path}/videos/"  # Initialize VIDEO_FOLDER here
+
     start_time = time.time()
 
     async with async_playwright() as p:
@@ -193,12 +185,11 @@ async def crawl(start_url):
         context = await browser.new_context(
             viewport={"width": 1280, "height": 1024},
             user_agent=CRAWLER_USER_AGENT,
-            record_video_dir=f"{base_path}/videos/",
+            record_video_dir=VIDEO_FOLDER,
             record_video_size={"width": 1280, "height": 1024}
         )
         PAGE = await context.new_page()
 
-        VIDEO_FOLDER = f"{base_path}/videos/"
         CONTEXT_MANAGER = context
 
         try:
@@ -211,7 +202,7 @@ async def crawl(start_url):
 
                 async with RATE_LIMIT:
                     new_links, result = await retry_fetch_page(current_url, PAGE, base_path)
-                    TO_VISIT_URLS.extend(new_links - VISITED_URLS)
+                    TO_VISIT_URLS.extend(list(new_links - set(VISITED_URLS)))
 
                     RESULTS.append(result)
 
@@ -239,7 +230,6 @@ async def crawl(start_url):
 
         return RESULTS
 
-
 async def handle_exit(sig, frame):
     global CONTEXT_MANAGER, PAGE, RUNNING, RESULTS, DOMAIN, VIDEO_FOLDER
     RUNNING = False
@@ -248,7 +238,6 @@ async def handle_exit(sig, frame):
         await CONTEXT_MANAGER.close()
     report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
     sys.exit(0)
-
 
 async def main():
     global CLEAR_COOKIES
@@ -268,7 +257,6 @@ async def main():
 
     start_url = args.start_url
     await crawl(start_url)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
