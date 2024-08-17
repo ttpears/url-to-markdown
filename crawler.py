@@ -8,14 +8,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import argparse
 from urllib.parse import urljoin, urlparse
+from dotenv import load_dotenv
 
 import aiolimiter
 from playwright.async_api import async_playwright, TimeoutError
 from bs4 import BeautifulSoup
 import report_generator
 
+# Load .env variables
+load_dotenv()
+
 VISITED_URLS = set()
-TO_VISIT_URLS = []
+TO_VISIT_URLS = set()
 DOMAIN = ""
 LINK_LIMIT = 1000
 RATE_LIMIT = aiolimiter.AsyncLimiter(1, 2)  # max concurrency: 1 request every 2 seconds
@@ -169,14 +173,14 @@ async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
                 }
 
 async def crawl(start_url):
-    global DOMAIN, CONTEXT_MANAGER, PAGE, RESULTS, RUNNING, TO_VISIT_URLS
+    global DOMAIN, CONTEXT_MANAGER, PAGE, RESULTS, RUNNING, TO_VISIT_URLS, VIDEO_FOLDER
     DOMAIN = urlparse(start_url).netloc
     base_path = create_directory_structure(DOMAIN)
-    TO_VISIT_URLS = [normalize_url('', start_url)]
+    TO_VISIT_URLS = set([normalize_url('', start_url)])  # Use set right from the start
     VISITED_URLS.clear()
     RESULTS = []
 
-    VIDEO_FOLDER = f"{base_path}/videos/"  # Initialize VIDEO_FOLDER here
+    VIDEO_FOLDER = f"{base_path}/videos/"  # Define VIDEO_FOLDER here
 
     start_time = time.time()
 
@@ -196,13 +200,13 @@ async def crawl(start_url):
             while TO_VISIT_URLS and len(VISITED_URLS) < LINK_LIMIT:
                 if not RUNNING:
                     break
-                current_url = TO_VISIT_URLS.pop(0)
+                current_url = TO_VISIT_URLS.pop()
                 if current_url in VISITED_URLS:
                     continue
 
                 async with RATE_LIMIT:
                     new_links, result = await retry_fetch_page(current_url, PAGE, base_path)
-                    TO_VISIT_URLS.extend(list(new_links - set(VISITED_URLS)))
+                    TO_VISIT_URLS.update(new_links - VISITED_URLS)  # Using set update method
 
                     RESULTS.append(result)
 
@@ -257,6 +261,102 @@ async def main():
 
     start_url = args.start_url
     await crawl(start_url)
+
+async def perform_login(page, login_url, username, password):
+    try:
+        await page.goto(login_url, wait_until="load", timeout=60000)
+        await page.fill('input[name="username"]', username)
+        await page.fill('input[name="password"]', password)
+        await page.click('button[type="submit"]')
+        await page.wait_for_selector('body', timeout=30000)
+        print(f"Logged in successfully to {login_url}")
+    except Exception as e:
+        print(f"Failed to log in: {e}")
+
+async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
+    for attempt in range(retries):
+        try:
+            return await fetch_page(url, page, base_path)
+        except Exception:
+            if attempt == retries - 1:
+                VISITED_URLS.discard(url)  # Use discard to avoid KeyError
+                return [], {
+                    "url": url,
+                    "screenshot": None,
+                    "video": None,
+                    "status": "fail",
+                    "response_code": "Error",
+                    "content_length": "Unknown",
+                    "assets_count": 0,
+                    "load_time": 0,
+                    "ttfb": 0
+                }
+
+async def fetch_page(url, page, base_path):
+    global VISITED_URLS, TOTAL_TESTED, SITEMAP_URLS, CLEAR_COOKIES
+
+    VISITED_URLS.add(url)
+    TOTAL_TESTED += 1
+    SITEMAP_URLS.append(url)
+    SITEMAP_URLS = sorted(set(SITEMAP_URLS))
+
+    if CLEAR_COOKIES:
+        await page.context.clear_cookies()
+
+    result = {
+        "url": url,
+        "screenshot": None,
+        "video": None,
+        "status": "fail",
+        "response_code": None,
+        "content_length": "Unknown",
+        "assets_count": 0,
+        "load_time": 0,
+        "ttfb": 0
+    }
+
+    try:
+        folder_name = url.replace("://", "_").replace("/", "_")
+        start_time = time.time()
+
+        ttfb_start_time = start_time
+        response = await page.goto(url, wait_until="load", timeout=60000)
+        ttfb = time.time() - ttfb_start_time
+
+        if not response or response.status != 200:
+            raise Exception(f"Non-200 or no response: {response}")
+
+        await page.wait_for_selector("body", timeout=20000)
+
+        screenshot_path = f'{base_path}/screenshots/{folder_name}.png'
+        Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+        await page.screenshot(path=screenshot_path)
+
+        content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time, ttfb)
+        links = await extract_links(content, url)
+
+        content_length = len(content) / 1024  # Content length in KB
+
+        result.update({
+            "screenshot": screenshot_path,
+            "status": "success",
+            "response_code": response.status,
+            "content_length": content_length,
+            "assets_count": assets_count,
+            "load_time": load_time,
+            "ttfb": ttfb
+        })
+
+        sitemap_path = os.path.join(base_path, 'sitemap.xml')
+        await save_sitemap(sitemap_path, SITEMAP_URLS)
+
+        return links, result
+
+    except TimeoutError:
+        return set(), result
+    except Exception as e:
+        result["error"] = str(e)
+        return set(), result
 
 if __name__ == "__main__":
     asyncio.run(main())

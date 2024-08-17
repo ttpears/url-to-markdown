@@ -2,3 +2,4 @@ playwright
 html2text
 beautifulsoup4
 aiolimiter
+python-dotenv
