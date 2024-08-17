@@ -1,54 +1,71 @@
-import sys
-import signal
 import asyncio
-from playwright.async_api import async_playwright, TimeoutError
-from bs4 import BeautifulSoup
 import os
-from urllib.parse import urljoin, urlparse
-from aiolimiter import AsyncLimiter
-from datetime import datetime, timedelta
-from pathlib import Path
+import signal
+import sys
 import time
 import json
+from datetime import datetime, timedelta
+from pathlib import Path
+import argparse
+from urllib.parse import urljoin, urlparse
+
+import aiolimiter
+from playwright.async_api import async_playwright, TimeoutError
+from bs4 import BeautifulSoup
 import report_generator
 
 VISITED_URLS = set()
 TO_VISIT_URLS = []
 DOMAIN = ""
 LINK_LIMIT = 1000
-RATE_LIMIT = AsyncLimiter(1, 2)  # max concurrency is 1 request every 2 seconds
+RATE_LIMIT = aiolimiter.AsyncLimiter(1, 2)  # max concurrency: 1 request every 2 seconds
 CONTEXT_MANAGER = None
-VIDEO_PATH = None
 PAGE = None
 RUNNING = True
 RESULTS = []
 TOTAL_TESTED = 0
 RETRY_LIMIT = 3
+SITEMAP_URLS = []
+CLEAR_COOKIES = False
 
-# Use a well-known User-Agent string for Google's web crawler
+# User-Agent for Google's web crawler
 CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
+
 def create_directory_structure(domain):
-    base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}'  # Updated path
+    base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}'
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(f'{base_path}/screenshots', exist_ok=True)
     os.makedirs(f'{base_path}/videos', exist_ok=True)
     os.makedirs(f'{base_path}/reports', exist_ok=True)
     return base_path
 
+
 def is_same_domain(url):
     return urlparse(url).netloc == DOMAIN
+
 
 def normalize_url(base, link):
     return urljoin(base, link.split('#')[0]).rstrip('/')
 
-async def extract_metrics(page, response, start_time):
+
+def get_folder_size(folder_path):
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(folder_path):
+        for file in filenames:
+            fp = os.path.join(dirpath, file)
+            total_size += os.path.getsize(fp)
+    # Return size in MB
+    return total_size / (1024 * 1024)
+
+
+async def extract_metrics(page, response, start_time, ttfb):
     content = await page.content()
     soup = BeautifulSoup(content, 'html.parser')
     assets_count = len(soup.find_all(['img', 'link', 'script']))
     load_time = time.time() - start_time
-    ttfb = response.headers.get("x-timing-request-start")
     return content, assets_count, load_time, ttfb
+
 
 async def extract_links(page_content, base_url):
     soup = BeautifulSoup(page_content, 'html.parser')
@@ -60,10 +77,30 @@ async def extract_links(page_content, base_url):
             links.add(full_url)
     return links
 
+
+async def save_sitemap(file_path, urls):
+    sitemap_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    ]
+    for url in urls:
+        sitemap_lines.append(f"  <url><loc>{url}</loc></url>")
+    sitemap_lines.append('</urlset>')
+
+    with open(file_path, 'w') as f:
+        f.write('\n'.join(sitemap_lines))
+
+
 async def fetch_page(url, page, base_path):
-    global VISITED_URLS, TOTAL_TESTED
+    global VISITED_URLS, TOTAL_TESTED, SITEMAP_URLS, CLEAR_COOKIES
+
     VISITED_URLS.add(url)
     TOTAL_TESTED += 1
+    SITEMAP_URLS.append(url)
+    SITEMAP_URLS = sorted(set(SITEMAP_URLS))
+
+    if CLEAR_COOKIES:
+        await page.context.clear_cookies()
 
     result = {
         "url": url,
@@ -80,25 +117,27 @@ async def fetch_page(url, page, base_path):
     try:
         folder_name = url.replace("://", "_").replace("/", "_")
         start_time = time.time()
-        response = await page.goto(url, wait_until="networkidle", timeout=60000)
+
+        ttfb_start_time = start_time
+        response = await page.goto(url, wait_until="load", timeout=60000)
+        ttfb = time.time() - ttfb_start_time
 
         if not response or response.status != 200:
             raise Exception(f"Non-200 or no response: {response}")
 
         await page.wait_for_selector("body", timeout=20000)
-        screenshots_path = f'{base_path}/screenshots/{folder_name}.png'
 
-        # Ensure directory exists before saving the screenshot
-        Path(screenshots_path).parent.mkdir(parents=True, exist_ok=True)
-        await page.screenshot(path=screenshots_path)
+        screenshot_path = f'{base_path}/screenshots/{folder_name}.png'
+        Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+        await page.screenshot(path=screenshot_path)
 
-        content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time)
+        content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time, ttfb)
         links = await extract_links(content, url)
 
         content_length = len(content) / 1024  # Content length in KB
 
         result.update({
-            "screenshot": screenshots_path,
+            "screenshot": screenshot_path,
             "status": "success",
             "response_code": response.status,
             "content_length": content_length,
@@ -106,6 +145,9 @@ async def fetch_page(url, page, base_path):
             "load_time": load_time,
             "ttfb": ttfb
         })
+
+        sitemap_path = os.path.join(base_path, 'sitemap.xml')
+        await save_sitemap(sitemap_path, SITEMAP_URLS)
 
         return links, result
 
@@ -115,11 +157,12 @@ async def fetch_page(url, page, base_path):
         result["error"] = str(e)
         return [], result
 
+
 async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
     for attempt in range(retries):
         try:
             return await fetch_page(url, page, base_path)
-        except Exception as e:
+        except Exception:
             if attempt == retries - 1:
                 VISITED_URLS.remove(url)
                 return [], {
@@ -134,8 +177,9 @@ async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
                     "ttfb": 0
                 }
 
+
 async def crawl(start_url):
-    global DOMAIN, CONTEXT_MANAGER, PAGE, RESULTS, VIDEO_PATH, RUNNING, TO_VISIT_URLS
+    global DOMAIN, CONTEXT_MANAGER, PAGE, RESULTS, RUNNING, TO_VISIT_URLS
     DOMAIN = urlparse(start_url).netloc
     base_path = create_directory_structure(DOMAIN)
     TO_VISIT_URLS = [normalize_url('', start_url)]
@@ -154,7 +198,7 @@ async def crawl(start_url):
         )
         PAGE = await context.new_page()
 
-        VIDEO_PATH = f"{base_path}/videos/{DOMAIN}.webm"
+        VIDEO_FOLDER = f"{base_path}/videos/"
         CONTEXT_MANAGER = context
 
         try:
@@ -167,38 +211,27 @@ async def crawl(start_url):
 
                 async with RATE_LIMIT:
                     new_links, result = await retry_fetch_page(current_url, PAGE, base_path)
-                    for link in new_links:
-                        if link not in VISITED_URLS and link not in TO_VISIT_URLS:
-                            TO_VISIT_URLS.append(link)
+                    TO_VISIT_URLS.extend(new_links - VISITED_URLS)
+
                     RESULTS.append(result)
 
                     elapsed_time = str(timedelta(seconds=int(time.time() - start_time)))
-                    estimated_size = os.path.getsize(VIDEO_PATH) / (1024 * 1024) if os.path.exists(VIDEO_PATH) else 0
+                    video_folder_size = get_folder_size(VIDEO_FOLDER)
 
                     output_string = (
                         f"\r🔗 Testing: {result.get('url', 'Unknown')[:40]:<40} | "
                         f"⏲️ Elapsed: {elapsed_time:<10} | "
-                        f"📹 Video: {estimated_size:.2f}MB"
+                        f"📹 Video: {video_folder_size:.2f}MB"
                     )
 
-                    # Ensure fixed length for line clearing by adding spaces to the end
                     print(output_string.ljust(100), end="", flush=True)
 
             await context.close()
 
-            # Clear line after completion
             print("\r" + " " * 100, end="\r")
 
-            # Rename the created video file to the meaningful name
-            for file in os.listdir(f"{base_path}/videos/"):
-                full_path = os.path.join(f"{base_path}/videos/", file)
-                if file.endswith(".webm") and os.path.exists(full_path):
-                    os.rename(full_path, VIDEO_PATH)
-                    print(f"Video saved: {VIDEO_PATH}")
-                    break
-
             print(f"Generating report in: {base_path}")
-            report_generator.generate_report(RESULTS, base_path, VIDEO_PATH if os.path.exists(VIDEO_PATH) else None)
+            report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
             await browser.close()
         except Exception as e:
             print(f"\nError during crawl: {e}")
@@ -206,35 +239,36 @@ async def crawl(start_url):
 
         return RESULTS
 
+
 async def handle_exit(sig, frame):
-    global CONTEXT_MANAGER, PAGE, RUNNING, RESULTS, DOMAIN, VIDEO_PATH
+    global CONTEXT_MANAGER, PAGE, RUNNING, RESULTS, DOMAIN, VIDEO_FOLDER
     RUNNING = False
-    base_path = f'/app/output/{DOMAIN.replace(":", "_").replace("/", "_")}'  # Updated path
+    base_path = f'/app/output/{DOMAIN.replace(":", "_").replace("/", "_")}'
     if CONTEXT_MANAGER:
         await CONTEXT_MANAGER.close()
-    if PAGE and VIDEO_PATH:
-        for file in os.listdir(f"{base_path}/videos/"):
-            full_path = os.path.join(f"{base_path}/videos/", file)
-            if file.endswith(".webm") and os.path.exists(full_path):
-                os.rename(full_path, VIDEO_PATH)
-                print(f"Video saved during exit: {VIDEO_PATH}")
-                break
-    report_generator.generate_report(RESULTS, base_path, VIDEO_PATH if os.path.exists(VIDEO_PATH) else None)
+    report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
     sys.exit(0)
 
+
 async def main():
+    global CLEAR_COOKIES
+
     def signal_handler(sig, frame):
         asyncio.create_task(handle_exit(sig, frame))
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if len(sys.argv) < 2:
-        print("Usage: python crawler.py <START_URL>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="A website crawler that generates reports and sitemaps.")
+    parser.add_argument("start_url", help="The starting URL for the crawl.")
+    parser.add_argument("--clear-cookies", action="store_true", help="Clear cookies between requests.")
+    args = parser.parse_args()
 
-    start_url = sys.argv[1]
+    CLEAR_COOKIES = args.clear_cookies
+
+    start_url = args.start_url
     await crawl(start_url)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
