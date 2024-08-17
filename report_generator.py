@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from datetime import datetime
 import os
@@ -109,13 +108,13 @@ def generate_report(results, base_path, video_file_path):
         screenshot_path = result.get('screenshot', "N/A")
         relative_screenshot_path = (
             os.path.relpath(screenshot_path, os.path.join(base_path, "reports"))
-            if screenshot_path != "N/A" and isinstance(screenshot_path, (str, Path)) and Path(screenshot_path).exists()
+            if screenshot_path != "N/A" and Path(screenshot_path).exists()
             else "N/A"
         )
 
-        content_length = "{:.2f}".format(result['content_length']) if isinstance(result['content_length'], (int, float)) else result['content_length']
-        load_time = "{:.2f}".format(result['load_time']) if isinstance(result['load_time'], (int, float)) else result['load_time']
-        ttfb = "{:.2f}".format(result['ttfb']) if isinstance(result['ttfb'], (int, float)) else result['ttfb']
+        content_length = "{:.2f}".format(result['content_length']) if isinstance(result['content_length'], (int, float)) else "N/A"
+        load_time = "{:.2f}".format(result['load_time']) if isinstance(result['load_time'], (int, float)) else "N/A"
+        ttfb = "{:.2f}".format(result['ttfb']) if isinstance(result['ttfb'], (int, float)) else "N/A"
 
         row_template = """
             <tr>
@@ -174,3 +173,4 @@ def generate_report(results, base_path, video_file_path):
         json.dump(json_report, f, indent=4)
 
     print(f"\nReports saved to {reports_path.resolve()}")
+
