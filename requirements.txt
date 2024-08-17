@@ -1,2 +1,4 @@
 playwright
 html2text
+beautifulsoup4
+aiolimiter

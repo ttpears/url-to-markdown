@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libasound2 \
     xvfb \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -40,8 +41,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN playwright install chromium
 RUN playwright install-deps
 
-# Copy the Python script into the container
+# Copy the Python scripts into the container
 COPY url-to-markdown.py .
+COPY crawler.py .
+COPY report_generator.py .
 
 # Add script to start xvfb and run the script
 COPY start.sh /app/start.sh
