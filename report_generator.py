@@ -18,14 +18,12 @@ def generate_report(results, base_path, video_file_path):
             .container {{ max-width: 1400px; margin: auto; padding: 20px; }}
             h1, h2, p {{ color: #333; }}
             .summary {{ padding: 10px; background: #f9f9f9; margin-bottom: 20px; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #f2f2f2; cursor: pointer; }}
-            th.sortable:hover {{ background-color: #eee; }}
-            .pagination {{ display: flex; justify-content: center; margin-top: 20px; }}
-            .pagination button {{ margin: 0 5px; padding: 5px 10px; }}
-            .search-box {{ margin-bottom: 20px; }}
+            .dataTables_wrapper .dataTables_paginate .paginate_button {{ padding: 0 !important; }}
+            .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info {{ margin-bottom: 20px; }}
         </style>
+        <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+        <script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+        <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     </head>
     <body>
         <div class="container">
@@ -35,21 +33,17 @@ def generate_report(results, base_path, video_file_path):
                 <p>Total pages crawled: {total_pages}</p>
                 <p>Video: <a href="{video_link}">Download</a></p>
             </div>
-            <h2>Detailed Report</h2>
-            <div class="search-box">
-                <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search for URLs..">
-            </div>
             <h2>Failed Requests</h2>
-            <table id="failedReportTable">
+            <table id="failedReportTable" class="display">
                 <thead>
                 <tr>
-                    <th class="sortable" onclick="sortTable(0, 'failedReportTable')">URL</th>
-                    <th class="sortable" onclick="sortTable(1, 'failedReportTable')">Status</th>
-                    <th class="sortable" onclick="sortTable(2, 'failedReportTable')">Response Code</th>
-                    <th class="sortable" onclick="sortTable(3, 'failedReportTable')">Content Length (KB)</th>
-                    <th class="sortable" onclick="sortTable(4, 'failedReportTable')">Assets</th>
-                    <th class="sortable" onclick="sortTable(5, 'failedReportTable')">Load Time (s)</th>
-                    <th class="sortable" onclick="sortTable(6, 'failedReportTable')">TTFB (s)</th>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Response Code</th>
+                    <th>Content Length (KB)</th>
+                    <th>Assets</th>
+                    <th>Load Time (s)</th>
+                    <th>TTFB (s)</th>
                     <th>Screenshot</th>
                 </tr>
                 </thead>
@@ -58,16 +52,16 @@ def generate_report(results, base_path, video_file_path):
                 </tbody>
             </table>
             <h2>Successful Requests</h2>
-            <table id="reportTable">
+            <table id="reportTable" class="display">
                 <thead>
                 <tr>
-                    <th class="sortable" onclick="sortTable(0)">URL</th>
-                    <th class="sortable" onclick="sortTable(1)">Status</th>
-                    <th class="sortable" onclick="sortTable(2)">Response Code</th>
-                    <th class="sortable" onclick="sortTable(3)">Content Length (KB)</th>
-                    <th class="sortable" onclick="sortTable(4)">Assets</th>
-                    <th class="sortable" onclick="sortTable(5)">Load Time (s)</th>
-                    <th class="sortable" onclick="sortTable(6)">TTFB (s)</th>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Response Code</th>
+                    <th>Content Length (KB)</th>
+                    <th>Assets</th>
+                    <th>Load Time (s)</th>
+                    <th>TTFB (s)</th>
                     <th>Screenshot</th>
                 </tr>
                 </thead>
@@ -75,100 +69,15 @@ def generate_report(results, base_path, video_file_path):
                 {successful}
                 </tbody>
             </table>
-            <div class="pagination" id="pagination"></div>
         </div>
         <script>
-            function searchTable() {{
-                var input, filter, table, tr, td, i, j, txtValue;
-                input = document.getElementById("searchInput");
-                filter = input.value.toLowerCase();
-                table = document.getElementById("reportTable");
-                tr = table.getElementsByTagName("tr");
-                for (i = 1; i < tr.length; i++) {{
-                    tr[i].style.display = "none";
-                    td = tr[i].getElementsByTagName("td");
-                    for (j = 0; j < td.length; j++) {{
-                        if (td[j]) {{
-                            txtValue = td[j].textContent || td[j].innerText;
-                            if (txtValue.toLowerCase().indexOf(filter) > -1) {{
-                                tr[i].style.display = "";
-                                break;
-                            }}
-                        }}
-                    }}
-                }}
-            }}
-
-            function paginateTable(rowsPerPage) {{
-                var table, tr, i, j, pageCount, pagination, button;
-                table = document.getElementById("reportTable");
-                tr = table.getElementsByTagName("tr");
-                pageCount = Math.ceil((tr.length - 1) / rowsPerPage);
-                pagination = document.getElementById("pagination");
-                pagination.innerHTML = "";
-
-                for (i = 0; i < pageCount; i++) {{
-                    button = document.createElement("button");
-                    button.innerHTML = i + 1;
-                    button.setAttribute("data-page", i);
-                    button.onclick = function() {{
-                        var page = parseInt(this.getAttribute("data-page"));
-                        for (j = 1; j < tr.length; j++) {{
-                            tr[j].style.display = "none";
-                            if (j > page * rowsPerPage && j <= (page + 1) * rowsPerPage) {{
-                                tr[j].style.display = "";
-                            }}
-                        }}
-                    }};
-                    pagination.appendChild(button);
-                }}
-
-                if (pageCount > 0) {{
-                    pagination.getElementsByTagName("button")[0].click();
-                }}
-            }}
-
-            paginateTable(10);
-
-            function sortTable(n, tableId = 'reportTable') {{
-                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById(tableId);
-                switching = true;
-                dir = "asc";
-                while (switching) {{
-                    switching = false;
-                    rows = table.rows;
-                    for (i = 1; i < (rows.length - 1); i++) {{
-                        shouldSwitch = false;
-                        x = rows[i].getElementsByTagName("TD")[n];
-                        y = rows[i + 1].getElementsByTagName("TD")[n];
-                        if (dir == "asc") {{
-                            if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }} else if (dir == "desc") {{
-                            if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {{
-                                shouldSwitch = true;
-                                break;
-                            }}
-                        }}
-                    }}
-                    if (shouldSwitch) {{
-                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-                        switching = true;
-                        switchcount ++;
-                    }} else {{
-                        if (switchcount == 0 && dir == "asc") {{
-                            dir = "desc";
-                            switching = true;
-                        }}
-                    }}
-                }}
-            }}
+            $(document).ready(function() {{
+                $('#failedReportTable').DataTable();
+                $('#reportTable').DataTable();
+            }});
         </script>
     </body>
-    </html>
+    </html>    
     """
 
     non_successful_html = ""
