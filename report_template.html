@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawl Report</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Crawl Report - {{ timestamp }}</h1>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h2>Summary</h2>
+                <p>Total pages crawled: {{ stats.total_pages }}</p>
+                <p>Successful requests: {{ stats.successful_count }}</p>
+                <p>Non-successful requests: {{ stats.non_successful_count }}</p>
+                <p>Video: <a href="{{ video_link }}" class="btn btn-primary">Download</a></p>
+            </div>
+        </div>
+
+        <h2>Failed Requests</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Response Code</th>
+                    <th>Content Length (KB)</th>
+                    <th>Assets</th>
+                    <th>Load Time (s)</th>
+                    <th>TTFB (s)</th>
+                    <th>Screenshot</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ non_successful | safe }}
+            </tbody>
+        </table>
+
+        <h2>Successful Requests</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Response Code</th>
+                    <th>Content Length (KB)</th>
+                    <th>Assets</th>
+                    <th>Load Time (s)</th>
+                    <th>TTFB (s)</th>
+                    <th>Screenshot</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ successful | safe }}
+            </tbody>
+        </table>
+
+        <div class="mt-4">
+            <h2>Response Codes Distribution</h2>
+            {{ plotly_chart | safe }}
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

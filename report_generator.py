@@ -77,7 +77,7 @@ def generate_report(results, base_path, video_file_path):
             }});
         </script>
     </body>
-    </html>    
+    </html>
     """
 
     non_successful_html = ""
@@ -168,4 +168,4 @@ def generate_report(results, base_path, video_file_path):
     with open(reports_path / "report.json", "w") as f:
         json.dump(json_report, f, indent=4)
 
-    print(f"\nReports saved to {reports_path.resolve()}")
+    print(f"\nReports saved to {reports_path.resolve()}")                

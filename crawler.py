@@ -36,7 +36,8 @@ CLEAR_COOKIES = False
 CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 def create_directory_structure(domain):
-    base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}'
+    timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}_{timestamp}'
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(f'{base_path}/screenshots', exist_ok=True)
     os.makedirs(f'{base_path}/videos', exist_ok=True)
@@ -121,8 +122,26 @@ async def fetch_page(url, page, base_path):
         if not response:
             raise Exception(f"No response for URL: {url}")
 
-        # Update result with response code
         result["response_code"] = response.status
+
+        content_type = response.headers.get('Content-Type', '')
+
+        # Handle PDFs and Videos as successful if they start streaming
+        if content_type.startswith('application/pdf') or content_type.startswith('video/'):
+            # Screenshot still required for consistency
+            screenshot_path = f'{base_path}/screenshots/{folder_name}.png'
+            Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+            await page.screenshot(path=screenshot_path)
+
+            result.update({
+                "screenshot": screenshot_path,
+                "status": "success",
+                "content_length": "Streamed",
+                "assets_count": 0,
+                "load_time": time.time() - start_time,
+                "ttfb": ttfb
+            })
+            return set(), result
 
         # Handle all 2xx responses as successful
         if 200 <= response.status < 300:
