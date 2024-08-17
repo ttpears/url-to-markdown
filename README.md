@@ -1,25 +1,28 @@
 # URL to Markdown
 
-`url-to-markdown` is a Python-based tool that converts a webpage from a given URL to a Markdown file and takes a screenshot of the webpage. The tool uses [Playwright](https://playwright.dev/) to fetch and renderthe page content, and [html2text](https://github.com/Alir3z4/html2text) to convert the HTML to Markdown format.
+`url-to-markdown` is a Python-based tool that converts a webpage from a given URL to a Markdown file, takes a screenshot of the webpage, and offers a web crawler that generates detailed reports of crawled pages.The tool uses [Playwright](https://playwright.dev/) to fetch and render the page content, and [html2text](https://github.com/Alir3z4/html2text) to convert the HTML to Markdown format.
 
 ## File Structure
 
 ```
 url-to-markdown/
+├── crawler.py
 ├── docker-compose.yml
 ├── Dockerfile
+├── README.md
+├── report_generator.py
 ├── requirements.txt
 ├── start.sh
-├── url_to_markdown.py
-└── volumes.d/
-    └── output
+└── url-to-markdown.py
 ```
 
 ## File Contents
 
+- **crawler.py**: The Python script to crawl a website.
 - **url_to_markdown.py**: The main Python script that fetches the webpage content and converts it to Markdown.
+- **report_generator.py**: Generates HTML and JSON reports of the crawl.
 - **Dockerfile**: The Dockerfile for building a Docker image that runs the Python script.
-- **requirements.txt**: Python dependencies needed for the script.
+- **requirements.txt**: Python dependencies needed for the scripts.
 - **docker-compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
 - **start.sh**: Script to start xvfb and run the main script.
 
@@ -47,29 +50,60 @@ url-to-markdown/
 
 3. **Convert URL to Markdown**
 
-   You can then specify the URL to convert by passing it as an argument:
+   You can specify the URL to convert by passing it as an argument:
 
    ```sh
-   docker compose run --rm url-to-markdown <URL>
+   docker compose run --rm url-to-markdown convert <URL>
    ```
 
    For example:
 
    ```sh
-   docker compose run --rm url-to-markdown https://example.com
+   docker compose run --rm url-to-markdown convert https://example.com
    ```
 
    The resulting Markdown file and screenshot will be saved in the `./volumes.d/output/<URL>` directory.
 
+4. **Crawl Website**
+
+   You can specify the URL to crawl by passing it as an argument:
+
+   ```sh
+   docker compose run --rm url-to-markdown crawl <URL>
+   ```
+
+   For example:
+
+   ```sh
+   docker compose run --rm url-to-markdown crawl https://example.com
+   ```
+
+   The reports will be saved in the `./volumes.d/output/<URL>` directory.
+
+## Viewing Reports
+
+To view the generated HTML report:
+
+1. Navigate to the `./volumes.d/output/<domain>/reports/` directory.
+2. Open the `report.html` file in a web browser.
+
+For example, if the domain is `example.com`, the path would be `./volumes.d/output/example_com/reports/report.html`.
+
 ## Example
 
-To convert a URL, use the following command:
+### Convert a URL to Markdown:
 
 ```sh
-docker compose run --rm url-to-markdown https://example.com
+docker compose run --rm url-to-markdown convert https://example.com
 ```
 
-This converts the content of `https://example.com` into a Markdown file and takes a screenshot, both of which will be saved in the `./volumes.d/output` directory.
+### Crawl a Website:
+
+```sh
+docker compose run --rm url-to-markdown crawl https://example.com
+```
+
+This will crawl `https://example.com` and generate detailed reports in the `./volumes.d/output/example_com/reports` directory.
 
 ## Cleaning Up
 
