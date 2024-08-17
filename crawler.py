@@ -21,7 +21,7 @@ load_dotenv()
 VISITED_URLS = set()
 TO_VISIT_URLS = set()
 DOMAIN = ""
-LINK_LIMIT = 1000
+LINK_LIMIT = 999999
 RATE_LIMIT = aiolimiter.AsyncLimiter(1, 2)  # max concurrency: 1 request every 2 seconds
 CONTEXT_MANAGER = None
 PAGE = None
@@ -148,7 +148,7 @@ async def fetch_page(url, page, base_path):
 
     except TimeoutError:
         return set(), result
-    except Exception as e:
+    except (Exception, asyncio.CancelledError) as e:
         result["error"] = str(e)
         return set(), result
 
@@ -227,9 +227,11 @@ async def crawl(start_url):
             print(f"Generating report in: {base_path}")
             report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
             await browser.close()
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
             print(f"\nError during crawl: {e}")
             await handle_exit(None, None)
+            loop = asyncio.get_event_loop()
+            loop.stop()
 
         return RESULTS
 
@@ -238,9 +240,15 @@ async def handle_exit(sig, frame):
     RUNNING = False
     base_path = f'/app/output/{DOMAIN.replace(":", "_").replace("/", "_")}'
     if CONTEXT_MANAGER:
-        await CONTEXT_MANAGER.close()
-    report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
-    sys.exit(0)
+        try:
+            await CONTEXT_MANAGER.close()
+        except Exception as e:
+            print(f"Error closing context: {e}")
+    try:
+        report_generator.generate_report(RESULTS, base_path, VIDEO_FOLDER)
+    except (Exception, asyncio.CancelledError) as e:
+        print(f"Error generating report: {e}")
+    print("Shutting down gracefully...")
 
 async def main():
     global CLEAR_COOKIES
@@ -248,13 +256,17 @@ async def main():
     def signal_handler(sig, frame):
         asyncio.create_task(handle_exit(sig, frame))
 
-    signal.signal(signal.SIGINT, signal_handler)
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, lambda sig=sig: asyncio.create_task(handle_exit(sig, None)))
     signal.signal(signal.SIGTERM, signal_handler)
 
     parser = argparse.ArgumentParser(description="A website crawler that generates reports and sitemaps.")
     parser.add_argument("start_url", help="The starting URL for the crawl.")
     parser.add_argument("--clear-cookies", action="store_true", help="Clear cookies between requests.")
+    parser.add_argument("--max-pages", type=int, default=-1, help="Maximum number of pages to crawl. Set to -1 for unlimited.")
     args = parser.parse_args()
+    LINK_LIMIT = args.max_pages if args.max_pages > 0 else float('inf')
 
     CLEAR_COOKIES = args.clear_cookies
 
