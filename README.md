@@ -31,7 +31,7 @@ url-to-markdown/
 - [Docker](https://www.docker.com/get-started)
 - [Docker Compose](https://docs.docker.com/compose/)
 
-## Usage
+## Setting Up
 
 1. **Clone the Repository**
 
@@ -48,37 +48,39 @@ url-to-markdown/
 
    This command will build the Docker image and start the container. The output directory inside the container is mapped to `./volumes.d/output` on your host machine.
 
-3. **Convert URL to Markdown**
+## Usage
 
-   You can specify the URL to convert by passing it as an argument:
+### Convert URL to Markdown
 
-   ```sh
-   docker compose run --rm url-to-markdown convert <URL>
-   ```
+You can specify the URL to convert by passing it as an argument:
 
-   For example:
+```sh
+docker compose run --rm url-to-markdown convert <URL>
+```
 
-   ```sh
-   docker compose run --rm url-to-markdown convert https://example.com
-   ```
+For example:
 
-   The resulting Markdown file and screenshot will be saved in the `./volumes.d/output/<URL>` directory.
+```sh
+docker compose run --rm url-to-markdown convert https://example.com
+```
 
-4. **Crawl Website**
+The resulting Markdown file and screenshot will be saved in the `./volumes.d/output/<URL>` directory.
 
-   You can specify the URL to crawl by passing it as an argument:
+### Crawl Website
 
-   ```sh
-   docker compose run --rm url-to-markdown crawl <URL>
-   ```
+You can specify the URL to crawl by passing it as an argument:
 
-   For example:
+```sh
+docker compose run --rm url-to-markdown crawl <URL>
+```
 
-   ```sh
-   docker compose run --rm url-to-markdown crawl https://example.com
-   ```
+For example:
 
-   The reports will be saved in the `./volumes.d/output/<URL>` directory.
+```sh
+docker compose run --rm url-to-markdown crawl https://example.com
+```
+
+The reports will be saved in the `./volumes.d/output/<URL>` directory.
 
 ## Viewing Reports
 
