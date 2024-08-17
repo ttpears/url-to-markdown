@@ -1,6 +1,8 @@
 import json
+import os
 from pathlib import Path
 from datetime import datetime
+import os
 
 def generate_report(results, base_path, video_file_path):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -29,7 +31,7 @@ def generate_report(results, base_path, video_file_path):
             <div class="summary">
                 <h2>Summary</h2>
                 <p>Total pages crawled: {total_pages}</p>
-                <p>Video: <a href="file://{video_link}">Download</a></p>
+                <p>Video: <a href="{video_link}">Download</a></p>
             </div>
             <h2>Detailed Report</h2>
             <table id="reportTable">
@@ -98,12 +100,18 @@ def generate_report(results, base_path, video_file_path):
     json_report = {
         "timestamp": timestamp,
         "total_pages_crawled": len(results),
-        "video": video_file_path,
+        "video": video_file_path if video_file_path else "N/A",
         "details": []
     }
 
+    print("Generating HTML report...")
     for result in results:
-        relative_screenshot_path = Path(result['screenshot']).resolve().as_uri() if 'error' not in result else "N/A"
+        screenshot_path = result.get('screenshot', "N/A")
+        relative_screenshot_path = (
+            os.path.relpath(screenshot_path, os.path.join(base_path, "reports"))
+            if screenshot_path != "N/A" and isinstance(screenshot_path, (str, Path)) and Path(screenshot_path).exists()
+            else "N/A"
+        )
 
         content_length = "{:.2f}".format(result['content_length']) if isinstance(result['content_length'], (int, float)) else result['content_length']
         load_time = "{:.2f}".format(result['load_time']) if isinstance(result['load_time'], (int, float)) else result['load_time']
@@ -118,7 +126,7 @@ def generate_report(results, base_path, video_file_path):
                 <td>{assets_count}</td>
                 <td>{load_time}</td>
                 <td>{ttfb}</td>
-                <td><a href="{screenshot}">Screenshot</a></td>
+                <td><a href="{screenshot}" target="_blank">Screenshot</a></td>
             </tr>
         """
 
@@ -140,17 +148,29 @@ def generate_report(results, base_path, video_file_path):
 
         json_report["details"].append(result)
 
+    relative_video_link = (
+        os.path.relpath(video_file_path, os.path.join(base_path, "reports"))
+        if video_file_path and Path(video_file_path).exists()
+        else "N/A"
+    )
+
     html_report = html_template.format(
         timestamp=timestamp,
         total_pages=len(results),
-        video_link=Path(video_file_path).resolve().as_uri(),
+        video_link=relative_video_link,
         non_successful=non_successful_html,
         successful=successful_html
     )
 
-    reports_path = f"{base_path}/reports"
-    with open(f"{reports_path}/report.html", "w") as f:
+    reports_path = Path(base_path) / "reports"
+    reports_path.mkdir(parents=True, exist_ok=True)
+
+    print(f"Writing HTML report to {reports_path / 'report.html'}")
+    with open(reports_path / "report.html", "w") as f:
         f.write(html_report)
-    with open(f"{reports_path}/report.json", "w") as f:
+
+    print(f"Writing JSON report to {reports_path / 'report.json'}")
+    with open(reports_path / "report.json", "w") as f:
         json.dump(json_report, f, indent=4)
-    print(f"\nReports saved to {reports_path}")
+
+    print(f"\nReports saved to {reports_path.resolve()}")

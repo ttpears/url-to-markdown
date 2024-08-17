@@ -1,7 +1,7 @@
 import sys
 import signal
 import asyncio
-from playwright.async_api import async_playwright, TimeoutError, Response
+from playwright.async_api import async_playwright, TimeoutError
 from bs4 import BeautifulSoup
 import os
 from urllib.parse import urljoin, urlparse
@@ -16,7 +16,7 @@ VISITED_URLS = set()
 TO_VISIT_URLS = []
 DOMAIN = ""
 LINK_LIMIT = 1000
-RATE_LIMIT = AsyncLimiter(1, 2)  # max concurrency is 1 request every 0.5 seconds
+RATE_LIMIT = AsyncLimiter(1, 2)  # max concurrency is 1 request every 2 seconds
 CONTEXT_MANAGER = None
 VIDEO_PATH = None
 PAGE = None
@@ -29,7 +29,7 @@ RETRY_LIMIT = 3
 CRAWLER_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 def create_directory_structure(domain):
-    base_path = f'/app/output/{domain}'
+    base_path = f'/app/output/{domain.replace(":", "_").replace("/", "_")}'  # Updated path
     os.makedirs(base_path, exist_ok=True)
     os.makedirs(f'{base_path}/screenshots', exist_ok=True)
     os.makedirs(f'{base_path}/videos', exist_ok=True)
@@ -47,8 +47,7 @@ async def extract_metrics(page, response, start_time):
     soup = BeautifulSoup(content, 'html.parser')
     assets_count = len(soup.find_all(['img', 'link', 'script']))
     load_time = time.time() - start_time
-    ttfb = response.headers["x-timing-request-start"] if "x-timing-request-start" in response.headers and "x-timing-response-end" in response.headers else None
-
+    ttfb = response.headers.get("x-timing-request-start")
     return content, assets_count, load_time, ttfb
 
 async def extract_links(page_content, base_url):
@@ -66,6 +65,18 @@ async def fetch_page(url, page, base_path):
     VISITED_URLS.add(url)
     TOTAL_TESTED += 1
 
+    result = {
+        "url": url,
+        "screenshot": None,
+        "video": None,
+        "status": "fail",
+        "response_code": None,
+        "content_length": "Unknown",
+        "assets_count": 0,
+        "load_time": 0,
+        "ttfb": 0
+    }
+
     try:
         folder_name = url.replace("://", "_").replace("/", "_")
         start_time = time.time()
@@ -76,6 +87,9 @@ async def fetch_page(url, page, base_path):
 
         await page.wait_for_selector("body", timeout=20000)
         screenshots_path = f'{base_path}/screenshots/{folder_name}.png'
+
+        # Ensure directory exists before saving the screenshot
+        Path(screenshots_path).parent.mkdir(parents=True, exist_ok=True)
         await page.screenshot(path=screenshots_path)
 
         content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time)
@@ -83,54 +97,35 @@ async def fetch_page(url, page, base_path):
 
         content_length = len(content) / 1024  # Content length in KB
 
-        return links, {
-            "url": url,
+        result.update({
             "screenshot": screenshots_path,
-            "video": None,
             "status": "success",
             "response_code": response.status,
             "content_length": content_length,
             "assets_count": assets_count,
             "load_time": load_time,
             "ttfb": ttfb
-        }
+        })
+
+        return links, result
 
     except TimeoutError:
-        print(f"TimeoutError: Failed to load page {url}")
-        return [], {
-            "error": f"Error: Timeout while loading the page {url}.",
-            "url": url,
-            "status": "fail",
-            "response_code": "Timeout",
-            "content_length": "Unknown",
-            "assets_count": 0,
-            "load_time": 0,
-            "ttfb": 0
-        }
+        return [], result
     except Exception as e:
-        print(f"Exception: {e} while loading page {url}")
-        return [], {
-            "error": str(e),
-            "url": url,
-            "status": "fail",
-            "response_code": "Error",
-            "content_length": "Unknown",
-            "assets_count": 0,
-            "load_time": 0,
-            "ttfb": 0
-        }
+        result["error"] = str(e)
+        return [], result
 
 async def retry_fetch_page(url, page, base_path, retries=RETRY_LIMIT):
     for attempt in range(retries):
         try:
             return await fetch_page(url, page, base_path)
         except Exception as e:
-            print(f"Attempt {attempt + 1}/{retries} failed for {url} with error: {e}")
             if attempt == retries - 1:
                 VISITED_URLS.remove(url)
                 return [], {
-                    "error": f"Error after {attempt + 1} retries: {str(e)}",
                     "url": url,
+                    "screenshot": None,
+                    "video": None,
                     "status": "fail",
                     "response_code": "Error",
                     "content_length": "Unknown",
@@ -176,22 +171,34 @@ async def crawl(start_url):
                         if link not in VISITED_URLS and link not in TO_VISIT_URLS:
                             TO_VISIT_URLS.append(link)
                     RESULTS.append(result)
+
                     elapsed_time = str(timedelta(seconds=int(time.time() - start_time)))
-                    try:
-                        estimated_size = os.path.getsize(VIDEO_PATH) / (1024 * 1024) if os.path.exists(VIDEO_PATH) else 0
-                    except FileNotFoundError:
-                        estimated_size = 0.0
-                    print(f"\r🔗 Currently testing: {result.get('url', 'Unknown')} | ⏲️ Time Elapsed: {elapsed_time} | 📹 Estimated Video Size: {estimated_size:.2f}MB", end="", flush=True)
+                    estimated_size = os.path.getsize(VIDEO_PATH) / (1024 * 1024) if os.path.exists(VIDEO_PATH) else 0
+
+                    output_string = (
+                        f"\r🔗 Testing: {result.get('url', 'Unknown')[:40]:<40} | "
+                        f"⏲️ Elapsed: {elapsed_time:<10} | "
+                        f"📹 Video: {estimated_size:.2f}MB"
+                    )
+
+                    # Ensure fixed length for line clearing by adding spaces to the end
+                    print(output_string.ljust(100), end="", flush=True)
 
             await context.close()
+
+            # Clear line after completion
+            print("\r" + " " * 100, end="\r")
+
             # Rename the created video file to the meaningful name
             for file in os.listdir(f"{base_path}/videos/"):
                 full_path = os.path.join(f"{base_path}/videos/", file)
                 if file.endswith(".webm") and os.path.exists(full_path):
                     os.rename(full_path, VIDEO_PATH)
+                    print(f"Video saved: {VIDEO_PATH}")
                     break
 
-            report_generator.generate_report(RESULTS, base_path, VIDEO_PATH)
+            print(f"Generating report in: {base_path}")
+            report_generator.generate_report(RESULTS, base_path, VIDEO_PATH if os.path.exists(VIDEO_PATH) else None)
             await browser.close()
         except Exception as e:
             print(f"\nError during crawl: {e}")
@@ -202,7 +209,7 @@ async def crawl(start_url):
 async def handle_exit(sig, frame):
     global CONTEXT_MANAGER, PAGE, RUNNING, RESULTS, DOMAIN, VIDEO_PATH
     RUNNING = False
-    base_path = f'/app/output/{DOMAIN}'
+    base_path = f'/app/output/{DOMAIN.replace(":", "_").replace("/", "_")}'  # Updated path
     if CONTEXT_MANAGER:
         await CONTEXT_MANAGER.close()
     if PAGE and VIDEO_PATH:
@@ -210,12 +217,18 @@ async def handle_exit(sig, frame):
             full_path = os.path.join(f"{base_path}/videos/", file)
             if file.endswith(".webm") and os.path.exists(full_path):
                 os.rename(full_path, VIDEO_PATH)
+                print(f"Video saved during exit: {VIDEO_PATH}")
                 break
-    report_generator.generate_report(RESULTS, base_path, VIDEO_PATH)
+    report_generator.generate_report(RESULTS, base_path, VIDEO_PATH if os.path.exists(VIDEO_PATH) else None)
     sys.exit(0)
 
 async def main():
-    signal.signal(signal.SIGINT, lambda sig, frame: asyncio.create_task(handle_exit(sig, frame)))
+    def signal_handler(sig, frame):
+        asyncio.create_task(handle_exit(sig, frame))
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     if len(sys.argv) < 2:
         print("Usage: python crawler.py <START_URL>")
         sys.exit(1)
