@@ -26,6 +26,17 @@ url-to-markdown/
 - **docker-compose.yml**: Docker Compose file to run the Docker container with necessary configurations.
 - **start.sh**: Script to start xvfb and run the main script.
 
+## Summary of Features for the Crawler
+
+- **Domain-Specific Crawling**: The crawler ensures it only visits URLs within the same domain as the start URL.
+- **Rate Limiting**: It uses aiolimiter to limit the rate of requests to prevent overloading the target server.
+- **Retry Logic**: The crawler will retry fetching a URL up to a specified limit if it encounters errors.
+- **Metrics Collection**: For each page, the crawler collects metrics such as response code, content length, asset count, load time, and time-to-first-byte (TTFB).
+- **Screenshot and Video Capture**: It captures screenshots and videos of pages.
+- **HTML and JSON Report Generation**: The crawler generates detailed HTML and JSON reports of the crawl.
+- **Graceful Shutdown**: The crawler handles SIGINT and SIGTERM signals to shut down gracefully and generates reports before exiting.
+- **Sitemap Creation**: It generates an XML sitemap of all visited URLs, including only URLs with successful responses.
+
 ## Prerequisites
 
 - [Docker](https://www.docker.com/get-started)

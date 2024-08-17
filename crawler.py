@@ -74,7 +74,8 @@ async def extract_links(page_content, base_url):
             links.add(full_url)
     return links
 
-async def save_sitemap(file_path, urls):
+def save_sitemap(file_path, urls):
+    urls = sorted(set(urls))  # Ensure URLs are unique and sorted
     sitemap_lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
@@ -83,16 +84,16 @@ async def save_sitemap(file_path, urls):
         sitemap_lines.append(f"  <url><loc>{url}</loc></url>")
     sitemap_lines.append('</urlset>')
 
-    with open(file_path, 'w') as f:
-        f.write('\n'.join(sitemap_lines))
+    with open(file_path, "w") as f:
+        f.write("\n".join(sitemap_lines))
 
 async def fetch_page(url, page, base_path):
     global VISITED_URLS, TOTAL_TESTED, SITEMAP_URLS, CLEAR_COOKIES
 
     VISITED_URLS.add(url)
     TOTAL_TESTED += 1
-    SITEMAP_URLS.append(url)
-    SITEMAP_URLS = sorted(set(SITEMAP_URLS))
+    if url not in SITEMAP_URLS:
+        SITEMAP_URLS.append(url)
 
     if CLEAR_COOKIES:
         await page.context.clear_cookies()
@@ -146,8 +147,9 @@ async def fetch_page(url, page, base_path):
                 "ttfb": ttfb
             })
 
+            # Save the sitemap
             sitemap_path = os.path.join(base_path, 'sitemap.xml')
-            await save_sitemap(sitemap_path, SITEMAP_URLS)
+            save_sitemap(sitemap_path, SITEMAP_URLS)
 
             return links, result
 
