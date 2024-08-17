@@ -70,7 +70,7 @@ async def extract_links(page_content, base_url):
     for link_tag in soup.find_all('a', href=True):
         link = link_tag['href']
         full_url = normalize_url(base_url, link)
-        if is_same_domain(full_url) and full_url not in VISITED_URLS:
+        if is_same_domain(full_url):
             links.add(full_url)
     return links
 
@@ -117,36 +117,48 @@ async def fetch_page(url, page, base_path):
         response = await page.goto(url, wait_until="load", timeout=60000)
         ttfb = time.time() - ttfb_start_time
 
-        if not response or response.status != 200:
-            raise Exception(f"Non-200 or no response: {response}")
+        if not response:
+            raise Exception(f"No response for URL: {url}")
 
-        await page.wait_for_selector("body", timeout=20000)
+        # Update result with response code
+        result["response_code"] = response.status
 
-        screenshot_path = f'{base_path}/screenshots/{folder_name}.png'
-        Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
-        await page.screenshot(path=screenshot_path)
+        # Handle all 2xx responses as successful
+        if 200 <= response.status < 300:
+            await page.wait_for_selector("body", timeout=20000)
 
-        content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time, ttfb)
-        links = await extract_links(content, url)
+            screenshot_path = f'{base_path}/screenshots/{folder_name}.png'
+            Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+            await page.screenshot(path=screenshot_path)
 
-        content_length = len(content) / 1024  # Content length in KB
+            content, assets_count, load_time, ttfb = await extract_metrics(page, response, start_time, ttfb)
+            links = await extract_links(content, url)
 
-        result.update({
-            "screenshot": screenshot_path,
-            "status": "success",
-            "response_code": response.status,
-            "content_length": content_length,
-            "assets_count": assets_count,
-            "load_time": load_time,
-            "ttfb": ttfb
-        })
+            content_length = len(content) / 1024  # Content length in KB
 
-        sitemap_path = os.path.join(base_path, 'sitemap.xml')
-        await save_sitemap(sitemap_path, SITEMAP_URLS)
+            result.update({
+                "screenshot": screenshot_path,
+                "status": "success",
+                "response_code": response.status,
+                "content_length": content_length,
+                "assets_count": assets_count,
+                "load_time": load_time,
+                "ttfb": ttfb
+            })
 
-        return links, result
+            sitemap_path = os.path.join(base_path, 'sitemap.xml')
+            await save_sitemap(sitemap_path, SITEMAP_URLS)
+
+            return links, result
+
+        # Handle non-200 responses
+        elif 400 <= response.status < 600:
+            raise Exception(f"{response.status} response for URL: {url}")
+
+        return set(), result
 
     except TimeoutError:
+        result["status"] = "timeout"
         return set(), result
     except (Exception, asyncio.CancelledError) as e:
         result["error"] = str(e)

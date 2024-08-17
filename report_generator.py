@@ -130,9 +130,9 @@ def generate_report(results, base_path, video_file_path):
 
             paginateTable(10);
 
-            function sortTable(n) {{
+            function sortTable(n, tableId = 'reportTable') {{
                 var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-                table = document.getElementById("reportTable");
+                table = document.getElementById(tableId);
                 switching = true;
                 dir = "asc";
                 while (switching) {{
@@ -198,7 +198,7 @@ def generate_report(results, base_path, video_file_path):
 
         row_template = """
             <tr>
-                <td>{url}</td>
+                <td><a href="{url}" target="_blank">{url}</a></td>
                 <td>{status}</td>
                 <td>{response_code}</td>
                 <td>{content_length} KB</td>
